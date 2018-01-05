@@ -1,4 +1,4 @@
-package cmwell.benchmark
+package cmwell.benchmark.data
 
 import java.time.ZonedDateTime
 

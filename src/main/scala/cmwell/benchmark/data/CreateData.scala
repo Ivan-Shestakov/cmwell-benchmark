@@ -1,18 +1,22 @@
-package cmwell.benchmark
+package cmwell.benchmark.data
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.Uri
 import akka.stream.ActorMaterializer
+import org.slf4j.LoggerFactory
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContextExecutor, Future}
-import scala.util.Random
 
-import org.slf4j.LoggerFactory
+/**
+  * Initialize CM-Well with generated data.
+  */
+object CreateData {
 
-object Main extends App {
-
-  override def main(args: Array[String]): Unit = {
+  def apply(uri: Uri,
+            path: String,
+            chunks: Int,
+            infotonsPerChunk: Int): Unit = {
 
     val logger = LoggerFactory.getLogger("benchmark")
 
@@ -20,21 +24,7 @@ object Main extends App {
     implicit val executionContext: ExecutionContextExecutor = system.dispatcher
     implicit val actorMaterializer: ActorMaterializer = ActorMaterializer()
 
-    // TODO: Make these parameters
-    val url = "http://localhost:9000"
-    val chunks = 1000
-    val infotonsPerChunk = 1000
-
-    val uri = Uri(url)
-
-    require(uri.scheme == "http", "URL scheme must be HTTP (configuring connection pool for https is not implemented yet).")
-
-    // Generate a path so that we are generating data into an empty path.
-    val path = s"http://${uri.authority.host}:${uri.authority.port}/benchmark-${new Random().nextInt()}"
-    logger.info(s"Infotons will be generated in path $path")
-
     try {
-
       logger.info("Starting monitoring of background queues")
       // Monitoring will terminate when the queues have been empty for `waitForCancelCheck`
 
@@ -53,12 +43,9 @@ object Main extends App {
         chunks = chunks,
         infotonsPerChunk = infotonsPerChunk).run()
 
-      val queueMonitoringData = Await.result(queueMonitorData, Duration.Inf)
-          .flatten  // Remove any missing observations and flatten
-
-      logger.info(s"Monitoring data:\n${AllQueueStatus.flattenAndGenerateCSV(queueMonitoringData)}")
-
-      println(IngestionRates(queueMonitoringData))
+      // Wait for CM-Well to persist/index the data posted.
+      Await.result(queueMonitorData, Duration.Inf)
+      logger.info("Generated data has been persisted/indexed.")
     }
     finally {
       system.terminate()

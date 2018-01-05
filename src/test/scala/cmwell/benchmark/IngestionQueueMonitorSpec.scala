@@ -2,6 +2,7 @@ package cmwell.benchmark
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
+import cmwell.benchmark.data.{AllQueueStatus, IngestionQueueMonitor}
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 import scala.concurrent.duration._

@@ -1,4 +1,4 @@
-package cmwell.benchmark
+package cmwell.benchmark.data
 
 import akka.NotUsed
 import akka.actor.{ActorSystem, Cancellable}
@@ -8,13 +8,21 @@ import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
 import akka.util.ByteString
-import cmwell.benchmark.AllQueueStatus.extractResponse
+import cmwell.benchmark.data.AllQueueStatus.extractResponse
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.duration.{FiniteDuration, _}
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
 
+/**
+  * Monitors CM-Well's persist/index queues.
+  * The `Future` returned by `result` will return when queues have been empty for at least `waitForCancelCheck`.
+  * This was originally created in an attempt to determine the rate that queues were capable of processing.
+  *
+  * TODO: Since we are using this only to determine when the queues have been drained, it doesn't need to return
+  * the complete history.
+  */
 case class IngestionQueueMonitor(host: String,
                                  port: Int,
                                  waitBeforeStarting: FiniteDuration = 0.seconds,
@@ -66,7 +74,6 @@ case class IngestionQueueMonitor(host: String,
 
       case HttpResponse(status, _, _, _) =>
         logger.warn(s"Queue status request failed for tick $tick with status $status")
-        // TODO: Special handling for 503?
         Future.successful(None) // Skip this observation
     }
 

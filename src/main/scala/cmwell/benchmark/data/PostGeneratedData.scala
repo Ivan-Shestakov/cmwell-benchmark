@@ -1,24 +1,27 @@
-package cmwell.benchmark
+package cmwell.benchmark.data
 
-import akka.{Done, NotUsed}
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
+import akka.pattern.after
 import akka.stream.ActorMaterializer
 import akka.stream.contrib.Retry
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import akka.util.ByteString
+import akka.{Done, NotUsed}
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
-import akka.pattern.after
 
 case class PostInfotonFlowState(request: HttpRequest,
                                 sequenceNumber: Int,
                                 retriesLeft: Int)
 
+/**
+  * Generates a sequence of infotons that are POSTed to CM-Well.
+  */
 case class PostGeneratedData(host: String,
                              port: Int,
                              path: String,
@@ -33,7 +36,7 @@ case class PostGeneratedData(host: String,
 
   private val poolClientFlow = Http().cachedHostConnectionPool[PostInfotonFlowState](host = host, port = port)
 
-  private val generator = new Generator(randomSeed, path)
+  private val generator = new InfotonGenerator(randomSeed, s"http://$host:$port/$path", infotonsPerChunk * chunks)
 
   private val postToUri = s"http://$host:$port/_in?format=ntriples"
 
