@@ -1,10 +1,12 @@
 package cmwell.benchmark.run
 
+import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Paths}
 
 import akka.http.scaladsl.model.Uri
 import cmwell.benchmark.data._
+import org.rogach.scallop.ScallopConf
 import org.slf4j.LoggerFactory
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -43,26 +45,36 @@ object BenchmarkRunner extends App {
 
     val logger = LoggerFactory.getLogger("BenchmarkRunner")
 
-    // TODO: Make these arguments
-    val url = "http://localhost:9000"
-    val infotonCount = 10000
-    val resultsDirectory = s"results-${System.currentTimeMillis}" // TODO: Validate that resultsDirectory is empty
+    object Opts extends ScallopConf(args) {
+
+      var infotons = opt[Long]("infotons", descr = "The number of infotons to create for testing", required = true, validate = _ > 0)
+      val output = opt[File]("output", descr = "The directory where results will be written", required = true)
+      val seed = opt[Int]("seed", descr = "A seed value for the data generation sequence", default = Some(0))
+      val url = trailArg[String]("url", descr = "The URL of the CM-Well server instance to benchmark", required = true, validate = _.nonEmpty)
+
+      // TODO: Validate that output either doesn't exist, or is an empty directory
+
+      verify()
+    }
+
+    val uri = Uri(Opts.url())
+    require(uri.scheme == "http", "URL scheme must be HTTP (configuring connection pool for https is not implemented yet).")
+
+    // Initialize fields used by simulation classes.
+    _baseURL = s"http://${uri.authority.host.address}:${uri.authority.port}"
+    _seed = Opts.seed()
+
+    val resultsDirectory = Opts.output().toString // TODO: Should this directory be cleared if it exists? Check it is non-empty?
 
     val infotonsPerChunk = 1000 // POST this many infotons per request.
-    val chunks = Math.ceil(infotonCount.toDouble / infotonsPerChunk).toInt
+    val chunks = Math.ceil(Opts.infotons().toDouble / infotonsPerChunk).toInt
     val actualInfotonCount = chunks * infotonsPerChunk
-
-    val uri = Uri(url)
-    require(uri.scheme == "http", "URL scheme must be HTTP (configuring connection pool for https is not implemented yet).")
+    _infotonCount = actualInfotonCount
 
     // Generate a path so that we are generating data into an empty path.
     _path = s"benchmark-${new Random().nextInt()}"
     logger.info(s"Infotons will be generated in path $path")
 
-    // Initialize fields used by simulation classes.
-    _baseURL = s"http://${uri.authority.host.address}:${uri.authority.port}"
-    _seed = 0
-    _infotonCount = actualInfotonCount
 
     // Generate data and POST it to CM-Well
     CreateData(uri = uri, path = path, chunks = chunks, infotonsPerChunk = infotonsPerChunk)
