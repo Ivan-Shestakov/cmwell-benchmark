@@ -105,7 +105,9 @@ object AllQueueStatus {
 }
 
 /** The processing rate for each queue, measured as infotons per millisecond */
-case class IngestionRates(persist: Double, index: Double)
+case class IngestionRates(persist: Double, index: Double) {
+  override def toString: String =  s"IngestionRates(persist = $persist, index = $index)"
+}
 
 object IngestionRates {
 

@@ -44,8 +44,15 @@ object CreateData {
         infotonsPerChunk = infotonsPerChunk).run()
 
       // Wait for CM-Well to persist/index the data posted.
-      Await.result(queueMonitorData, Duration.Inf)
+      val queueMonitoringData = Await.result(queueMonitorData, Duration.Inf).flatten
       logger.info("Generated data has been persisted/indexed.")
+
+      // Here we are primarily concerned with detecting when the queues have been em
+      // This was an attempt to measure the persist/index rates by looking at the queue monitoring data.
+      // This produces highly variable results since the queue positions are only updated every 10 seconds.
+      // Perhaps there are other values that can be monitored to determine the monitoring rate.
+      //logger.info(s"Monitoring data:\n${AllQueueStatus.flattenAndGenerateCSV(queueMonitoringData)}")
+      logger.info(IngestionRates(queueMonitoringData).toString)
     }
     finally {
       system.terminate()

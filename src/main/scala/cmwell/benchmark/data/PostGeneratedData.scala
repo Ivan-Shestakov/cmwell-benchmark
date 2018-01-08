@@ -16,8 +16,7 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
 
 case class PostInfotonFlowState(request: HttpRequest,
-                                sequenceNumber: Int,
-                                retriesLeft: Int)
+                                sequenceNumber: Int)
 
 /**
   * Generates a sequence of infotons that are POSTed to CM-Well.
@@ -40,9 +39,9 @@ case class PostGeneratedData(host: String,
 
   private val postToUri = s"http://$host:$port/_in?format=ntriples"
 
-  // TODO: Make configurable; implement (exponential) back-off strategy
-  private val Retries = 10
-  private val WaitSeconds = 30
+  private val retryWaitSeconds = 10
+
+  private val exception = new Exception()
 
   private val postRequestFlow: Flow[(Future[HttpRequest], PostInfotonFlowState), (Try[HttpResponse], PostInfotonFlowState), NotUsed] =
     Flow[(Future[HttpRequest], PostInfotonFlowState)]
@@ -53,7 +52,7 @@ case class PostGeneratedData(host: String,
         case (Success(response), state: PostInfotonFlowState) if response.status.intValue == 503 =>
           logger.warn(s"POST for sequence=${state.sequenceNumber} failed with status 503.")
           response.discardEntityBytes()
-          Failure(new Throwable()) -> state // TODO: Need a particular throwable here?
+          Failure(exception) -> state
 
         case (Success(response), state: PostInfotonFlowState) =>
           logger.debug(s"POST for sequence=${state.sequenceNumber} succeeded.")
@@ -63,9 +62,6 @@ case class PostGeneratedData(host: String,
         case (Failure(ex), state: PostInfotonFlowState) =>
           logger.error(s"Posting data failed for sequence=${state.sequenceNumber} with $ex")
           throw ex
-
-        case _ =>
-          throw new Exception()
       }
 
   private def initialRequest(sequenceNumber: Int): (Future[HttpRequest], PostInfotonFlowState) = {
@@ -85,7 +81,7 @@ case class PostGeneratedData(host: String,
       uri = postToUri,
       entity = entity)
 
-    Future.successful(request) -> PostInfotonFlowState(request = request, sequenceNumber = sequenceNumber, retriesLeft = Retries)
+    Future.successful(request) -> PostInfotonFlowState(request = request, sequenceNumber = sequenceNumber)
   }
 
   def run(): Future[Done] = Source(1 to chunks)
@@ -93,13 +89,9 @@ case class PostGeneratedData(host: String,
     .via(Retry(postRequestFlow)(retryDecider))
     .runWith(Sink.ignore)
 
-  private def retryDecider(state: PostInfotonFlowState): Option[(Future[HttpRequest], PostInfotonFlowState)] =
-    if (state.retriesLeft == 0) {
-      logger.warn(s"Retrying POST for sequence number ${state.sequenceNumber}")
-      None
-    }
-    else {
-      logger.warn(s"Final POST retry for sequence number ${state.sequenceNumber} failed - this POST will be dropped.")
-      Some(after(WaitSeconds.seconds, system.scheduler)(Future.successful(state.request)) -> state.copy(retriesLeft = state.retriesLeft - 1))
-    }
+
+  private def retryDecider(state: PostInfotonFlowState): Option[(Future[HttpRequest], PostInfotonFlowState)] = {
+    logger.warn(s"Final POST retry for sequence number ${state.sequenceNumber} failed - this POST will be dropped.")
+    Some(after(retryWaitSeconds.seconds, system.scheduler)(Future.successful(state.request)) -> state)
+  }
 }

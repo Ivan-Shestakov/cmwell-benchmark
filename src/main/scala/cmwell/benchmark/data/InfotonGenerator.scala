@@ -4,8 +4,11 @@ package cmwell.benchmark.data
   * Creates infoton text from a template.
   * The values in each field are populated from a Feeder.
   *
-  * @param seed A random seed for value generation.
-  * @param path The path that the infoton will be created in.
+  * TODO: Expand this to include more fields (esp. more data types).
+  * TODO: Should generate a variable number of link fields according to some distribution function.
+  *
+  * @param seed         A random seed for value generation.
+  * @param path         The path that the infoton will be created in.
   * @param wrapAroundAt The total number of infotons to be generated.
   */
 class InfotonGenerator(seed: Int, path: String, wrapAroundAt: Int) {
