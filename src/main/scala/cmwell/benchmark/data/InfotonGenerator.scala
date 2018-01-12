@@ -11,7 +11,7 @@ package cmwell.benchmark.data
   * @param path         The path that the infoton will be created in.
   * @param wrapAroundAt The total number of infotons to be generated.
   */
-class InfotonGenerator(seed: Int, path: String, wrapAroundAt: Int) {
+class InfotonGenerator(seed: Int, path: String, wrapAroundAt: Long) {
 
   private val feeder = AllFieldsFeeder(seed, path, wrapAroundAt)
 

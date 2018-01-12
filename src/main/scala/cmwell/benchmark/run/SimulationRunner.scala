@@ -11,6 +11,14 @@ import spray.json._
 
 case class SimulationResult(simulation: String, responseTime: Int, requestsPerSecond: Double)
 
+object SimulationResults {
+
+  def toJson(results: Seq[SimulationResult]): String = {
+    implicit val resultFormat: RootJsonFormat[SimulationResult] = jsonFormat3(SimulationResult)
+    results.toJson.prettyPrint
+  }
+}
+
 /**
   * Runs a Gatling `Simulation` and collects the summary results.
   * The detailed results are retained on the file system.

@@ -17,11 +17,11 @@ object AllFieldsFeeder {
 
   def apply(seed: Int = 0,
             path: String,
-            wrapAroundAt: Int): Feeder[String] = {
+            wrapAroundAt: Long): Feeder[String] = {
 
     var randomGenerator: Random = null
     var previousRandomValue = 0
-    var position = 0
+    var position = 0L
 
     Iterator.continually {
 

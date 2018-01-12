@@ -1,5 +1,6 @@
 package cmwell.benchmark.data
 
+import akka.Done
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.Uri
 import akka.stream.ActorMaterializer
@@ -15,20 +16,18 @@ object CreateData {
 
   def apply(uri: Uri,
             path: String,
-            chunks: Int,
-            infotonsPerChunk: Int): Unit = {
+            infotonCount: Long)
+           (implicit system: ActorSystem,
+            executionContext: ExecutionContextExecutor,
+            actorMaterializer: ActorMaterializer): Unit = {
 
     val logger = LoggerFactory.getLogger("benchmark")
-
-    implicit val system: ActorSystem = ActorSystem("http-example")
-    implicit val executionContext: ExecutionContextExecutor = system.dispatcher
-    implicit val actorMaterializer: ActorMaterializer = ActorMaterializer()
 
     try {
       logger.info("Starting monitoring of background queues")
       // Monitoring will terminate when the queues have been empty for `waitForCancelCheck`
 
-      val queueMonitorData: Future[Seq[Option[AllQueueStatus]]] = IngestionQueueMonitor(
+      val queueMonitorData: Future[Done] = IngestionQueueMonitor(
         host = uri.authority.host.address,
         port = uri.authority.port,
         waitBeforeCancelCheck = 10.seconds,
@@ -40,19 +39,11 @@ object CreateData {
         host = uri.authority.host.address,
         port = uri.authority.port,
         path = path,
-        chunks = chunks,
-        infotonsPerChunk = infotonsPerChunk).run()
+        infotonCount = infotonCount).run()
 
       // Wait for CM-Well to persist/index the data posted.
-      val queueMonitoringData = Await.result(queueMonitorData, Duration.Inf).flatten
+      Await.result(queueMonitorData, Duration.Inf)
       logger.info("Generated data has been persisted/indexed.")
-
-      // Here we are primarily concerned with detecting when the queues have been em
-      // This was an attempt to measure the persist/index rates by looking at the queue monitoring data.
-      // This produces highly variable results since the queue positions are only updated every 10 seconds.
-      // Perhaps there are other values that can be monitored to determine the monitoring rate.
-      //logger.info(s"Monitoring data:\n${AllQueueStatus.flattenAndGenerateCSV(queueMonitoringData)}")
-      logger.info(IngestionRates(queueMonitoringData).toString)
     }
     finally {
       system.terminate()
