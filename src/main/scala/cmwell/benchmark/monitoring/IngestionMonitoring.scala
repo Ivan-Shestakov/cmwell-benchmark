@@ -28,9 +28,9 @@ case class IngestionMonitoring(phase: String,
   private val logger = LoggerFactory.getLogger(classOf[IngestionMonitoring])
 
   // When this was implemented using the global akka context, cancelling one of these monitors cause the
-  // others to fail. Not sure how to make cancel work gracefully, but isolating each of the monitors in its own
-  // context seems to solve the problem.
-  implicit val system: ActorSystem = ActorSystem("cmwell-benchmark")
+  // others to fail (AbruptTerminationException). Isolating each JMX monitor in its own akka context
+  // solves that problem, but also prevents issues with using a blocking call.
+  implicit val system: ActorSystem = ActorSystem(s"monitor-jmx$phase")
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
   implicit val actorMaterializer: ActorMaterializer = ActorMaterializer()
 
@@ -55,4 +55,7 @@ case class IngestionMonitoring(phase: String,
   def cancel(): Boolean = cancellable.cancel()
 
   def result: Future[Seq[Option[CountMonitoring]]] = resultFuture
+
+  // Since we are using a private actor system, ensure it is shut down.
+  def terminate(): Unit = system.terminate()
 }

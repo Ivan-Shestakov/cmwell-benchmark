@@ -79,47 +79,57 @@ object BenchmarkRunner extends App {
     implicit val executionContext: ExecutionContextExecutor = system.dispatcher
     implicit val actorMaterializer: ActorMaterializer = ActorMaterializer()
 
-    // Find all the bg nodes, and monitor them all
-    val bgHosts = BgNodes(uri.authority.host.address, uri.authority.port)
+    try {
+      // Find all the bg nodes, and monitor them all
+      val bgHosts = BgNodes(uri.authority.host.address, uri.authority.port)
 
-    val ingestMonitors = for {
-      bgHost <- bgHosts
-      (phase, metric) <- Seq(
-        ("persist", "metrics:name=cmwell.bg.ImpStream.WriteCommand Counter"),
-        ("index", "metrics:name=cmwell.bg.IndexerStream.IndexNewCommand Counter"))
-    } yield IngestionMonitoring(
-      phase = phase,
-      host = bgHost,
-      port = Opts.jmxPort(),
-      metric = metric,
-      frequency = 1.second)
+      val ingestMonitors = for {
+        bgHost <- bgHosts
+        (phase, metric) <- Seq(
+          ("persist", "metrics:name=cmwell.bg.ImpStream.WriteCommand Counter"),
+          ("index", "metrics:name=cmwell.bg.IndexerStream.IndexNewCommand Counter"))
+      } yield IngestionMonitoring(
+        phase = phase,
+        host = bgHost,
+        port = Opts.jmxPort(),
+        metric = metric,
+        frequency = 1.second)
 
-    // Generate data and POST it to CM-Well
-    CreateData(uri = uri, path = path, infotonCount = infotonCount)
+      try {
 
-    ingestMonitors.forall(_.cancel())
+        // Generate data and POST it to CM-Well
+        CreateData(uri = uri, path = path, infotonCount = infotonCount)
 
-    val ingestionRates = for {
-      monitor <- ingestMonitors
-      observations = Await.result(monitor.result, Duration.Inf)
-    } yield IngestionResults(host = monitor.host, phase = monitor.phase, infotons = infotonCount, observations)
+        ingestMonitors.foreach(_.cancel())
 
-    writeResultsFile(resultsDirectory, "ingest", IngestionResults.toJson(ingestionRates))
+        val ingestionRates = for {
+          monitor <- ingestMonitors
+          observations = Await.result(monitor.result, Duration.Inf)
+        } yield IngestionResults(host = monitor.host, phase = monitor.phase, infotons = infotonCount, observations)
 
+        writeResultsFile(resultsDirectory, "ingest", IngestionResults.toJson(ingestionRates))
+      }
+      finally {
+        ingestMonitors.foreach(_.terminate())
+      }
 
-    // Run the gatling simulations using that data
-    val simulationRunner = new SimulationRunner(resultsDirectory)
+      // Run the gatling simulations using that data
+      val simulationRunner = new SimulationRunner(resultsDirectory)
 
-    val simulations = Seq(
-      "Get",
-      "GetWithData",
-      "Search",
-      "SearchWithData")
+      val simulations = Seq(
+        "Get",
+        "GetWithData",
+        "Search",
+        "SearchWithData")
 
-    val results = for (simulation <- simulations) yield simulationRunner.run(simulation)
-    writeResultsFile(resultsDirectory, "api", SimulationResults.toJson(results))
+      val results = for (simulation <- simulations) yield simulationRunner.run(simulation)
+      writeResultsFile(resultsDirectory, "api", SimulationResults.toJson(results))
 
-    logger.info("Benchmarking run complete.")
+      logger.info("Benchmarking run complete.")
+    }
+    finally {
+      system.terminate()
+    }
   }
 
   def writeResultsFile(resultsDirectory: String, name: String, content: String): Unit = {
