@@ -38,8 +38,10 @@ case class PostGeneratedData(host: String,
   private val chunks = (infotonCount / infotonsPerChunk) + (if (infotonCount % infotonsPerChunk != 0) 1 else 0)
 
   private def infotonsInThisChunk(sequenceNumber: Long): Int =
-    if (sequenceNumber == chunks)
-      (infotonCount % infotonsPerChunk).toInt
+    if (sequenceNumber == chunks ) {
+      val countInLastChunk = (infotonCount % infotonsPerChunk).toInt
+      if (countInLastChunk == 0) infotonsPerChunk else countInLastChunk
+    }
     else
       infotonsPerChunk
 
