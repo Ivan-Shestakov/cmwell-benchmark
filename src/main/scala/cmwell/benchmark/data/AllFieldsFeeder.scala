@@ -50,8 +50,10 @@ object AllFieldsFeeder {
       // Generate up to maxPreviousPersonId personIds to personIds in the resevoir.
       // There may be less if the resevoir is not filled or if the same element is selected twice.
       // In most cases, the count should be something close to maxPreviousPersonId.
+      val previousPersonIdCount = currentPreviousPersonId min nonNegativeMod(currentRandom, maxPreviousPersonIdLinks + 1)
+
       // Since the feeder must have a single element type, generate a string separated by commas.
-      val previousPersonIds = (0 until (currentPreviousPersonId min maxPreviousPersonIdLinks))
+      val previousPersonIds = (0 until previousPersonIdCount)
         .map(_ => previousPersonIdResevoir(nonNegativeMod(randomGenerator.nextInt(), currentPreviousPersonId)))
         .mkString(",")
 
