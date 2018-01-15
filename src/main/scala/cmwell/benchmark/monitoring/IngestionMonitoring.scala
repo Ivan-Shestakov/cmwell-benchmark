@@ -3,22 +3,24 @@ package cmwell.benchmark.monitoring
 import javax.management.ObjectName
 import javax.management.remote.{JMXConnectorFactory, JMXServiceURL}
 
-import akka.NotUsed
-import akka.actor.{ActorSystem, Cancellable}
+import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.{Keep, Sink, Source}
 import org.slf4j.LoggerFactory
 
+import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration.{FiniteDuration, _}
-import scala.concurrent.{ExecutionContextExecutor, Future}
 
 case class CountMonitoring(time: Long, count: Long)
 
+/** Monitor a JMX count metric until cancelled, and produce a sequence of observations. */
 case class IngestionMonitoring(phase: String,
                                host: String, // of bg node
                                port: Int = 7196, // JMX port
                                metric: String, // MBean object name - must have a "Count" property
-                               frequency: FiniteDuration = 1.second) {
+                               frequency: FiniteDuration = 1.second)
+                              (implicit system: ActorSystem,
+                               executionContext: ExecutionContextExecutor,
+                               actorMaterializer: ActorMaterializer) {
 
   private val url = new JMXServiceURL(s"service:jmx:rmi:///jndi/rmi://$host:$port/jmxrmi")
   private val connector = JMXConnectorFactory.connect(url)
@@ -27,35 +29,41 @@ case class IngestionMonitoring(phase: String,
 
   private val logger = LoggerFactory.getLogger(classOf[IngestionMonitoring])
 
-  // When this was implemented using the global akka context, cancelling one of these monitors cause the
-  // others to fail (AbruptTerminationException). Isolating each JMX monitor in its own akka context
-  // solves that problem, but also prevents issues with using a blocking call.
-  implicit val system: ActorSystem = ActorSystem(s"monitor-jmx$phase")
-  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
-  implicit val actorMaterializer: ActorMaterializer = ActorMaterializer()
+  // This actor makes blocking calls to JMX, so use a separate dispatcher to bulkhead thread consumption.
+  private implicit val blockingDispatcher = system.dispatchers.lookup("blocking-jmx-dispatcher")
 
-  private val (cancellable: Cancellable, resultFuture: Future[Seq[Option[CountMonitoring]]]) =
-    Source.tick(0.seconds, frequency, NotUsed)
-      .map(_ => processTick).async
-      .toMat(Sink.seq)(Keep.both)
-      .run()
+  private var buffer = List.empty[CountMonitoring]
+  @volatile private var cancelled = false
+  private val tick = "tick"
 
-  private def processTick: Option[CountMonitoring] = {
+  private val tickActor: ActorRef = system.actorOf(Props(new Actor {
+
+    def receive = {
+      case tick =>
+
+        if (!cancelled)
+          processTick()
+
+        if (!cancelled)
+          system.scheduler.scheduleOnce(frequency, tickActor, tick)
+    }
+  }))
+
+  system.scheduler.scheduleOnce(frequency, tickActor, tick)
+
+  private def processTick(): Unit = {
 
     try {
-      Some(CountMonitoring(System.currentTimeMillis, server.getAttribute(metricObjectName, "Count").asInstanceOf[Long]))
+      val count = server.getAttribute(metricObjectName, "Count").asInstanceOf[Long]
+      buffer = CountMonitoring(System.currentTimeMillis, count) :: buffer
     }
     catch {
       case ex: Exception =>
-        logger.warn(s"Failed to collect metrics: $ex")
-        None
+        logger.warn(s"Failed to collect metrics for $phase for host $host: $ex")
     }
   }
 
-  def cancel(): Boolean = cancellable.cancel()
+  def cancel(): Unit = cancelled = true
 
-  def result: Future[Seq[Option[CountMonitoring]]] = resultFuture
-
-  // Since we are using a private actor system, ensure it is shut down.
-  def terminate(): Unit = system.terminate()
+  def result: Seq[CountMonitoring] = buffer.reverse.toVector // Return in order that observations were made.
 }

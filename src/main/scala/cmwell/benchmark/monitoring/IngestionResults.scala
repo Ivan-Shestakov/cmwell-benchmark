@@ -17,11 +17,9 @@ object IngestionResults {
   def apply(host: String,
             phase: String, // persist | index
             infotons: Long,
-            monitoredObservations: Seq[Option[CountMonitoring]]): IngestionResult = {
+            observations: Seq[CountMonitoring]): IngestionResult = {
 
-    require(monitoredObservations.nonEmpty)
-    // Remove the missing observations
-    val observations: Seq[CountMonitoring] = monitoredObservations.flatten
+    require(observations.nonEmpty)
 
     if (observations.isEmpty)
       throw new RuntimeException("No observations")

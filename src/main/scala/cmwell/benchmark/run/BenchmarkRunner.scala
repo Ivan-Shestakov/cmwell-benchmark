@@ -80,6 +80,7 @@ object BenchmarkRunner extends App {
     implicit val actorMaterializer: ActorMaterializer = ActorMaterializer()
 
     try {
+
       // Find all the bg nodes, and monitor them all
       val bgHosts = BgNodes(uri.authority.host.address, uri.authority.port)
 
@@ -95,23 +96,18 @@ object BenchmarkRunner extends App {
         metric = metric,
         frequency = 1.second)
 
-      try {
+      // Generate data and POST it to CM-Well
+      CreateData(uri = uri, path = path, infotonCount = infotonCount)
 
-        // Generate data and POST it to CM-Well
-        CreateData(uri = uri, path = path, infotonCount = infotonCount)
+      ingestMonitors.foreach(_.cancel())
 
-        ingestMonitors.foreach(_.cancel())
+      val ingestionRates = for {
+        monitor <- ingestMonitors
+        observations = monitor.result
+      } yield IngestionResults(host = monitor.host, phase = monitor.phase, infotons = infotonCount, observations)
 
-        val ingestionRates = for {
-          monitor <- ingestMonitors
-          observations = Await.result(monitor.result, Duration.Inf)
-        } yield IngestionResults(host = monitor.host, phase = monitor.phase, infotons = infotonCount, observations)
+      writeResultsFile(resultsDirectory, "ingest", IngestionResults.toJson(ingestionRates))
 
-        writeResultsFile(resultsDirectory, "ingest", IngestionResults.toJson(ingestionRates))
-      }
-      finally {
-        ingestMonitors.foreach(_.terminate())
-      }
 
       // Run the gatling simulations using that data
       val simulationRunner = new SimulationRunner(resultsDirectory)
@@ -133,7 +129,7 @@ object BenchmarkRunner extends App {
   }
 
   def writeResultsFile(resultsDirectory: String, name: String, content: String): Unit = {
-    new File(resultsDirectory).mkdir()  // Ensure directory exists before creating a file in it.
+    new File(resultsDirectory).mkdir() // Ensure directory exists before creating a file in it.
 
     val file = Paths.get(resultsDirectory).resolve(s"$name.json")
     Files.write(file, content.getBytes(UTF_8))
