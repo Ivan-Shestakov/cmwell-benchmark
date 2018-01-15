@@ -18,31 +18,6 @@ import scala.util.Random
 
 object BenchmarkRunner extends App {
 
-  // The gatling simulation classes must be defined with zero-arg constructors,
-  // so these fields are used as a way to parameterize the simulations.
-  private var _baseURL: String = _
-  private var _path: String = _
-  private var _seed: Int = _
-  private var _infotonCount: Long = _
-
-  /** The base URL (protocol, host, port) without a trailing slash. */
-  def baseURL = _baseURL
-
-  /** The path segment (under baseURL) where the data will be generated. */
-  def path = _path
-
-  /** The random seed that defines the sequence of data that will be generated.
-    * While the data is pseudo-random, the same sequence will always be generated given the same seed. */
-  def seed = _seed
-
-  /** The total number of infotons generated. */
-  def infotonCount = _infotonCount
-
-  /** A feeder that provides all the fields in the generated infoton, in the same order that the infotons are generated.
-    * If more than `infotonCount` values are retrieved from this feeder, it will wrap around to the start.
-    */
-  def allFieldsFeeder = AllFieldsFeeder(seed = seed, path = s"$baseURL/$path", wrapAroundAt = infotonCount)
-
 
   override def main(args: Array[String]): Unit = {
 
@@ -64,16 +39,15 @@ object BenchmarkRunner extends App {
     val uri = Uri(Opts.url())
     require(uri.scheme == "http", "url scheme must be HTTP.")
 
-    // Initialize fields used by simulation classes.
-    _infotonCount = Opts.infotons()
-    _baseURL = s"http://${uri.authority.host.address}:${uri.authority.port}"
-    _seed = Opts.seed()
-
     val resultsDirectory = Opts.output().toString // TODO: Should this directory be cleared if it exists? Check it is non-empty?
 
+    // Initialize parameters used by simulation classes.
+    SimulationParameters._infotonCount = Opts.infotons()
+    SimulationParameters._baseURL = s"http://${uri.authority.host.address}:${uri.authority.port}"
+    SimulationParameters._seed = Opts.seed()
     // Generate a path so that we are generating data into an empty path.
-    _path = s"benchmark-${new Random().nextInt()}"
-    logger.info(s"Infotons will be generated in path $path")
+    SimulationParameters._path = s"benchmark-${new Random().nextInt()}"
+    logger.info(s"Infotons will be generated in path ${SimulationParameters.path}")
 
     implicit val system: ActorSystem = ActorSystem("cmwell-benchmark")
     implicit val executionContext: ExecutionContextExecutor = system.dispatcher
@@ -81,7 +55,7 @@ object BenchmarkRunner extends App {
 
     try {
 
-      // Find all the bg nodes, and monitor them all
+      // Find all the bg nodes, and monitor the persist and index flows in each of them.
       val bgHosts = BgNodes(uri.authority.host.address, uri.authority.port)
 
       val ingestMonitors = for {
@@ -97,14 +71,16 @@ object BenchmarkRunner extends App {
         frequency = 1.second)
 
       // Generate data and POST it to CM-Well
-      CreateData(uri = uri, path = path, infotonCount = infotonCount)
+      CreateData(uri = uri, path = SimulationParameters.path, infotonCount = SimulationParameters.infotonCount)
 
       ingestMonitors.foreach(_.cancel())
 
-      val ingestionRates = for {
-        monitor <- ingestMonitors
-        observations = monitor.result
-      } yield IngestionResults(host = monitor.host, phase = monitor.phase, infotons = infotonCount, observations)
+      val ingestionRates = for (monitor <- ingestMonitors)
+        yield IngestionResults(
+          host = monitor.host,
+          phase = monitor.phase,
+          infotons = SimulationParameters.infotonCount,
+          observations = monitor.result)
 
       writeResultsFile(resultsDirectory, "ingest", IngestionResults.toJson(ingestionRates))
 
