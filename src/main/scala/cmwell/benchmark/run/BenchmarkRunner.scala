@@ -12,12 +12,10 @@ import cmwell.benchmark.monitoring._
 import org.rogach.scallop.ScallopConf
 import org.slf4j.LoggerFactory
 
+import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContextExecutor}
-import scala.util.Random
 
 object BenchmarkRunner extends App {
-
 
   override def main(args: Array[String]): Unit = {
 
@@ -46,7 +44,7 @@ object BenchmarkRunner extends App {
     SimulationParameters._baseURL = s"http://${uri.authority.host.address}:${uri.authority.port}"
     SimulationParameters._seed = Opts.seed()
     // Generate a path so that we are generating data into an empty path.
-    SimulationParameters._path = s"benchmark-${new Random().nextInt()}"
+    SimulationParameters._path = s"benchmark-${System.currentTimeMillis()}"
     logger.info(s"Infotons will be generated in path ${SimulationParameters.path}")
 
     implicit val system: ActorSystem = ActorSystem("cmwell-benchmark")

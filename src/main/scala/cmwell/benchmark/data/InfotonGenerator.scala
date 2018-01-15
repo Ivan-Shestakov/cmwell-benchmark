@@ -18,12 +18,26 @@ class InfotonGenerator(seed: Int, path: String, wrapAroundAt: Long) {
   def next(): String = {
 
     val x = feeder.next()
+    val personId = x("personId")
 
-    s"""<$path/${x("personId")}> <http://www.w3.org.1999/02/22-rdf-syntax-ns#type> <http://xmlns.com/foaf/0.1/Person> .
-       |<$path/${x("personId")}> <http://xmlns.com/foaf/0.1/name> "${x("name")}" .
-       |<$path/${x("personId")}> <http://xmlns.com/foaf/0.1/age> "${x("age")}"^^<http://www.w3.org/2001/XMLSchema#integer> .
-       |<$path/${x("personId")}> <http://xmlns.com/foaf/0.1/myersBriggs> "${x("myersBriggs")}" .
-       |<$path/${x("personId")}> <http://xmlns.com/foaf/0.1/knows> <$path/${x("previousPersonId")}> .
-       |""".stripMargin
+    val infotonText =
+      s"""<$path/${x("personId")}> <http://www.w3.org.1999/02/22-rdf-syntax-ns#type> <http://xmlns.com/foaf/0.1/Person> .
+         |<$path/$personId> <http://xmlns.com/foaf/0.1/name> "${x("name")}" .
+         |<$path/$personId> <http://xmlns.com/foaf/0.1/age> "${x("age")}"^^<http://www.w3.org/2001/XMLSchema#integer> .
+         |<$path/$personId> <http://xmlns.com/foaf/0.1/myersBriggs> "${x("myersBriggs")}" .
+         |""".stripMargin
+
+    val previousPersonIds = x("previousPersonIds")
+
+    // Generate a variable number of "knows" links to infotons already generated.
+    // The previousPeronIds element will have zero or more personIds separated by commas.
+    val previousPersonIdFields = if (previousPersonIds.isEmpty)
+      ""
+    else
+      previousPersonIds.split(',').map(previousPersonId =>
+        s""" <$path/$personId> <http://xmlns.com/foaf/0.1/knows> <$path/$previousPersonId> .""")
+        .mkString
+
+    infotonText + previousPersonIdFields
   }
 }
