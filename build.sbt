@@ -14,4 +14,5 @@ libraryDependencies ++= Seq(
   "org.slf4j" % "slf4j-api" % "1.7.5",
   "org.rogach" % "scallop_2.11" % "3.1.1",
   "org.scalatest" % "scalatest_2.11" % "3.0.1",
-  "org.scalactic" % "scalactic_2.11" % "3.0.1")
+  "org.scalactic" % "scalactic_2.11" % "3.0.1",
+  "commons-io" % "commons-io" % "2.5")

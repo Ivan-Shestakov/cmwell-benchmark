@@ -1,5 +1,6 @@
 package cmwell.benchmark.run
 
+import java.io.File
 import java.nio.file.{Files, Path, Paths}
 
 import cmwell.benchmark.util.FileUtils.readFile
@@ -9,13 +10,24 @@ import org.slf4j.LoggerFactory
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
-case class SimulationResult(simulation: String, responseTime: Int, requestsPerSecond: Double)
+case class SimulationResult(simulation: String,
+                            responseTime: Int,
+                            requestsPerSecond: Double,
+                            start: Long,
+                            end: Long)
 
 object SimulationResults {
 
+  private implicit val resultFormat: RootJsonFormat[SimulationResult] = jsonFormat5(SimulationResult)
+
+  val fileName = "api.json"
+
   def toJson(results: Seq[SimulationResult]): String = {
-    implicit val resultFormat: RootJsonFormat[SimulationResult] = jsonFormat3(SimulationResult)
     results.toJson.prettyPrint
+  }
+
+  def fromJson(source: String): Seq[SimulationResult] = {
+    source.parseJson.convertTo[Seq[SimulationResult]]
   }
 }
 
@@ -27,13 +39,13 @@ object SimulationResults {
   * A workaround is used to allow them to be parameterized (i.e., to access generated data) by referencing
   * fields of BenchmarkRunner.
   *
-  * @param resultsDirectoryName The directory that results will be placed in.
+  * @param tempDirectory The directory that results will be placed in.
   */
-class SimulationRunner(resultsDirectoryName: String) {
+class SimulationRunner(tempDirectory: File) {
 
   private val logger = LoggerFactory.getLogger("benchmark-runSimulation")
 
-  private val resultsDirectory = Paths.get(resultsDirectoryName)
+  private val resultsDirectory = Paths.get(tempDirectory.toString)
 
   // Run each simulation in this temporary directory
   private val runDirectoryName = "_run"
@@ -46,9 +58,11 @@ class SimulationRunner(resultsDirectoryName: String) {
     props.simulationClass(s"cmwell.benchmark.simulation.$simulation")
     props.resultsDirectory(simulationRunDirectory.toString)
 
+    val start = System.currentTimeMillis
     logger.info(s"Starting simulation: $simulation.")
     Gatling.fromMap(props.build)
     logger.info(s"Finished simulation $simulation.")
+    val end = System.currentTimeMillis
 
     // In simulationRunDirectory, there will be a single directory (<simulation>-<ts>)
     val simulationDirectory: Path = Files.list(simulationRunDirectory).findFirst.get
@@ -71,6 +85,11 @@ class SimulationRunner(resultsDirectoryName: String) {
     // Remove the run directory
     Files.delete(simulationRunDirectory)
 
-    SimulationResult(simulation = simulation, responseTime = responseTime, requestsPerSecond = requestsPerSecond)
+    SimulationResult(
+      simulation = simulation,
+      responseTime = responseTime,
+      requestsPerSecond = requestsPerSecond,
+      start = start,
+      end = end)
   }
 }

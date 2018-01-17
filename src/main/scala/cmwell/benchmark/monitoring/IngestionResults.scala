@@ -4,14 +4,26 @@ import org.apache.commons.math3.stat.regression.SimpleRegression
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
-case class IngestionResult(host: String, phase: String, infotons: Long, rate: Double)
+case class IngestionResult(host: String,
+                           phase: String,
+                           infotons: Long,
+                           rate: Double,
+                           start: Long,
+                           end: Long)
 
 object IngestionResults {
 
+  private implicit val ingestFormat: RootJsonFormat[IngestionResult] = jsonFormat6(IngestionResult)
+
   def toJson(results: Seq[IngestionResult]): String = {
-    implicit val ingestFormat: RootJsonFormat[IngestionResult] = jsonFormat4(IngestionResult)
     results.toJson.prettyPrint
   }
+
+  def fromJson(source: String): Seq[IngestionResult] = {
+    source.parseJson.convertTo[Seq[IngestionResult]]
+  }
+
+  val fileName = "ingest.json"
 
   /** Convert monitoring observations to a rate */
   def apply(host: String,
@@ -40,13 +52,13 @@ object IngestionResults {
     // Do a linear regression, and use the calculated slope to determine the rate.
     // This uses all the observations as input.
 
-//    {
-//      println(phase)
-//      val baseTime = observations.head.time
-//      val baseCount = observations.head.count
-//      for (ob <- observations)
-//        println(s"${ob.time - baseTime}, ${ob.count - baseCount}")
-//    }
+    //    {
+    //      println(phase)
+    //      val baseTime = observations.head.time
+    //      val baseCount = observations.head.count
+    //      for (ob <- observations)
+    //        println(s"${ob.time - baseTime}, ${ob.count - baseCount}")
+    //    }
 
     val baseTime = observations(first).time
     val baseCount = observations(first).count
@@ -66,6 +78,8 @@ object IngestionResults {
       host = host,
       phase = phase,
       infotons = infotons,
-      rate = slope * 1000) // infotons / second
+      rate = slope * 1000, // infotons / second
+      start = observations(first).time,
+      end = observations(last).time)
   }
 }

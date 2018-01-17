@@ -1,14 +1,13 @@
 package cmwell.benchmark.run
 
 import java.io.File
-import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.{Files, Paths}
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.Uri
 import akka.stream.ActorMaterializer
 import cmwell.benchmark.data._
 import cmwell.benchmark.monitoring._
+import org.apache.commons.io.FileUtils
 import org.rogach.scallop.ScallopConf
 import org.slf4j.LoggerFactory
 
@@ -24,20 +23,23 @@ object BenchmarkRunner extends App {
     object Opts extends ScallopConf(args) {
 
       var infotons = opt[Long]("infotons", descr = "The number of infotons to create for testing", required = true, validate = _ > 0)
-      val output = opt[File]("output", descr = "The directory where results will be written", required = true)
       val seed = opt[Int]("seed", descr = "A seed value for the data generation sequence", default = Some(0))
       val jmxPort = opt[Int]("jmx-port", descr = "The port that JMX monitoring is exposed on bg", default = Some(7196))
-      val url = trailArg[String]("url", descr = "The URL of the CM-Well ws instance to benchmark", required = true, validate = _.nonEmpty)
 
-      // TODO: Validate that output either doesn't exist, or is an empty directory
+      val rawResultsDir = opt[File]("raw-results", descr = "The directory where raw results will be written", required = false)
+      val baselinesDir = opt[File]("baselines", descr = "The directory to load baselines from", required = false)
+      val testResultsFile = opt[File]("junit", descr = "The file that the junit XML result is written to", required = false)
+
+      val ingestThreshold = opt[Double]("ingest-threshold", descr = "The ingestion threshold (percentage)", default = Some(0.0))
+      val simulationThreshold = opt[Double]("simulation-threshold", descr = "The simulation threshold (percentage)", default = Some(0.0))
+
+      val url = trailArg[String]("url", descr = "The URL of the CM-Well ws instance to benchmark", required = true, validate = _.nonEmpty)
 
       verify()
     }
 
     val uri = Uri(Opts.url())
     require(uri.scheme == "http", "url scheme must be HTTP.")
-
-    val resultsDirectory = Opts.output().toString // TODO: Should this directory be cleared if it exists? Check it is non-empty?
 
     // Initialize parameters used by simulation classes.
     SimulationParameters._infotonCount = Opts.infotons()
@@ -80,20 +82,31 @@ object BenchmarkRunner extends App {
           infotons = SimulationParameters.infotonCount,
           observations = monitor.result)
 
-      writeResultsFile(resultsDirectory, "ingest", IngestionResults.toJson(ingestionRates))
-
-
       // Run the gatling simulations using that data
-      val simulationRunner = new SimulationRunner(resultsDirectory)
+      val tempDirectory = makeTempDirectory()
+      try {
+        val simulationRunner = new SimulationRunner(tempDirectory)
 
-      val simulations = Seq(
-        "Get",
-        "GetWithData",
-        "Search",
-        "SearchWithData")
+        val simulations = Seq(
+          "Get",
+          "GetWithData",
+          "Search",
+          "SearchWithData")
 
-      val results = for (simulation <- simulations) yield simulationRunner.run(simulation)
-      writeResultsFile(resultsDirectory, "api", SimulationResults.toJson(results))
+        val simulationResults = for (simulation <- simulations) yield simulationRunner.run(simulation)
+
+        ReportResults(
+          baselinesDir = Opts.baselinesDir.toOption,
+          rawResultsDir = Opts.rawResultsDir.toOption,
+          testResultsFile = Opts.testResultsFile.toOption,
+          ingestionResults = ingestionRates,
+          simulationResults = simulationResults,
+          ingestThreshold = Opts.ingestThreshold(),
+          simulationThreshold = Opts.simulationThreshold())
+      }
+      finally {
+        cleanTempDirectory(tempDirectory)
+      }
 
       logger.info("Benchmarking run complete.")
     }
@@ -102,10 +115,15 @@ object BenchmarkRunner extends App {
     }
   }
 
-  def writeResultsFile(resultsDirectory: String, name: String, content: String): Unit = {
-    new File(resultsDirectory).mkdir() // Ensure directory exists before creating a file in it.
+  private def makeTempDirectory(): File = {
+    val name = "cmwell-benchmark-" + System.currentTimeMillis
+    val tmpDir = new File(System.getProperty("java.io.tmpdir"), name)
+    tmpDir.mkdir()
 
-    val file = Paths.get(resultsDirectory).resolve(s"$name.json")
-    Files.write(file, content.getBytes(UTF_8))
+    tmpDir
+  }
+
+  private def cleanTempDirectory(tempDirectory: File): Unit = {
+    FileUtils.deleteDirectory(tempDirectory)
   }
 }
