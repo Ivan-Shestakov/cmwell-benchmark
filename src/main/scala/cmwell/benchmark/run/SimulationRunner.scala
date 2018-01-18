@@ -3,12 +3,13 @@ package cmwell.benchmark.run
 import java.io.File
 import java.nio.file.{Files, Path, Paths}
 
-import cmwell.benchmark.util.FileUtils.readFile
 import io.gatling.app.Gatling
 import io.gatling.core.config.GatlingPropertiesBuilder
 import org.slf4j.LoggerFactory
 import spray.json.DefaultJsonProtocol._
 import spray.json._
+import org.apache.commons.io.FileUtils.readFileToString
+import java.nio.charset.StandardCharsets.UTF_8
 
 case class SimulationResult(simulation: String,
                             responseTime: Int,
@@ -66,10 +67,10 @@ class SimulationRunner(tempDirectory: File) {
 
     // In simulationRunDirectory, there will be a single directory (<simulation>-<ts>)
     val simulationDirectory: Path = Files.list(simulationRunDirectory).findFirst.get
-    val resultsFile = simulationDirectory.resolve("js").resolve("global_stats.json")
+    val resultsFile = new File(simulationDirectory.resolve("js").resolve("global_stats.json").toString)
 
     // Extract the results
-    val detailedResults = readFile(resultsFile).parseJson.asJsObject
+    val detailedResults = readFileToString(resultsFile, UTF_8).parseJson.asJsObject
 
     val responseTime = detailedResults
       .fields("meanResponseTime").asJsObject

@@ -108,6 +108,8 @@ object BenchmarkRunner extends App {
         cleanTempDirectory(tempDirectory)
       }
 
+      // TODO: Could purge the data just created.
+
       logger.info("Benchmarking run complete.")
     }
     finally {
