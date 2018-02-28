@@ -14,6 +14,10 @@ import org.slf4j.LoggerFactory
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 
+/**
+  * This entry point generates data, monitors the ingestion of that data, then runs a series of gatling simulations
+  * using that data.
+  */
 object BenchmarkRunner extends App {
 
   override def main(args: Array[String]): Unit = {
@@ -22,16 +26,16 @@ object BenchmarkRunner extends App {
 
     object Opts extends ScallopConf(args) {
 
-      var infotons = opt[Long]("infotons", descr = "The number of infotons to create for testing", required = true, validate = _ > 0)
-      val seed = opt[Int]("seed", descr = "A seed value for the data generation sequence", default = Some(0))
-      val jmxPort = opt[Int]("jmx-port", descr = "The port that JMX monitoring is exposed on bg", default = Some(7196))
+      var infotons = opt[Long]("infotons", short = 'i', descr = "The number of infotons to create for testing", required = true, validate = _ > 0)
+      val seed = opt[Int]("seed", short = 's', descr = "A seed value for the data generation sequence", default = Some(0))
+      val jmxPort = opt[Int]("jmx-port", short = 'x', descr = "The port that JMX monitoring is exposed on bg", default = Some(7196))
 
-      val rawResultsDir = opt[File]("raw-results", descr = "The directory where raw results will be written", required = false)
-      val baselinesDir = opt[File]("baselines", descr = "The directory to load baselines from", required = false)
-      val testResultsFile = opt[File]("junit", descr = "The file that the junit XML result is written to", required = false)
+      val rawResultsDir = opt[File]("raw-results", short = 'w', descr = "The directory where raw results will be written", required = false)
+      val baselinesDir = opt[File]("baselines", short = 'b', descr = "The directory to load baselines from", required = false)
+      val testResultsFile = opt[File]("junit", short = 'f', descr = "The file that the junit XML result is written to", required = false)
 
-      val ingestThreshold = opt[Double]("ingest-threshold", descr = "The ingestion threshold (percentage)", default = Some(0.0))
-      val simulationThreshold = opt[Double]("simulation-threshold", descr = "The simulation threshold (percentage)", default = Some(0.0))
+      val ingestThreshold = opt[Double]("ingest-threshold", short = 't', descr = "The ingestion threshold (percentage)", default = Some(0.0))
+      val simulationThreshold = opt[Double]("simulation-threshold", short = 'm', descr = "The simulation threshold (percentage)", default = Some(0.0))
 
       val url = trailArg[String]("url", descr = "The URL of the CM-Well ws instance to benchmark", required = true, validate = _.nonEmpty)
 
